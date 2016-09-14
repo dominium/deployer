@@ -35,6 +35,16 @@ env('git_cache', function () { //whether to use git cache - faster cloning by bo
     }
     return version_compare($version, '2.3', '>=');
 });
+env('hg_cache', function () { //whether to use git cache - faster cloning by borrowing objects from existing clones.
+    $hgVersion = run('{{bin/hg}} version');
+    $regs       = [];
+    if (preg_match('/version ((\d+\.?)+)/', $hgVersion, $regs)) {
+        $version = $regs[1];
+    } else {
+        $version = "1.0.0";
+    }
+    return version_compare($version, '3.7', '>=');
+});
 env('release_name', function () {
     // Set the deployment timezone
     if (!date_default_timezone_set(env('timezone'))) {
@@ -50,8 +60,9 @@ env('release_name', function () {
 env('bin/php', function () {
     return run('which php')->toString();
 });
-env('bin/git', function () {
-    return run('which git')->toString();
+
+env('bin/hg', function () {
+    return run('which hg')->toString();
 });
 env('bin/composer', function () {
     if (commandExist('composer')) {
@@ -65,7 +76,13 @@ env('bin/composer', function () {
 
     return $composer;
 });
+env('config/composer', function () {
+    if (commandExist('composer')) {
+        $composer = run('find {{release_path}} -name "composer.json"')->toString();
+    }
 
+    return $composer;
+});
 
 /**
  * Default arguments and options.
@@ -173,44 +190,81 @@ task('deploy:release', function () {
 task('deploy:update_code', function () {
     $repository = trim(get('repository'));
     $branch = env('branch');
-    $git = env('bin/git');
-    $gitCache = env('git_cache');
-    $depth = $gitCache ? '' : '--depth 1';
+    preg_match('/^.*\b(.git|hg|git)\b.*$/i', strtolower($repository), $type);
 
-    $at = '';
-    if (!empty($branch)) {
-        $at = "-b $branch";
-    }
+    if(isset($type[1]) && $type[1] === "hg") {
+        $hg = env('bin/hg');
+        $hgCache = env('hg_cache');
+        $depth = $hgCache ? '' : '--depth 1';
 
-    // If option `tag` is set
-    if (input()->hasOption('tag')) {
-        $tag = input()->getOption('tag');
-        if (!empty($tag)) {
-            $at = "-b $tag";
+        $at = '';
+        if (!empty($branch)) {
+            $at = "-b $branch";
         }
-    }
 
-    // If option `tag` is not set and option `revision` is set
-    if (empty($tag) && input()->hasOption('revision')) {
-        $revision = input()->getOption('revision');
-    }
+        // If option `tag` is set
+        if (input()->hasOption('tag')) {
+            $tag = input()->getOption('tag');
+            if (!empty($tag)) {
+                $at = "-u $tag";
+            }
+        }
 
-    $releases = env('releases_list');
+        // If option `tag` is not set and option `revision` is set
+        if (empty($tag) && input()->hasOption('revision')) {
+            $revision = input()->getOption('revision');
+        }
 
-    if (!empty($revision)) {
-        // To checkout specified revision we need to clone all tree.
-        run("$git clone $at --recursive -q $repository {{release_path}} 2>&1");
-        run("cd {{release_path}} && $git checkout $revision");
-    } elseif ($gitCache && isset($releases[1])) {
-        try {
-            run("$git clone $at --recursive -q --reference {{deploy_path}}/releases/{$releases[1]} --dissociate $repository  {{release_path}} 2>&1");
-        } catch (RuntimeException $exc) {
-            // If {{deploy_path}}/releases/{$releases[1]} has a failed git clone, is empty, shallow etc, git would throw error and give up. So we're forcing it to act without reference in this situation
+        $releases = env('releases_list');
+
+        if (!empty($revision)) {
+            // To checkout specified revision we need to clone all tree.
+            run("$hg clone $at $repository {{release_path}} 2>&1");
+            run("cd {{release_path}} && $hg checkout $revision");
+        } else {
+            // if we're using git cache this would be identical to above code in catch - full clone. If not, it would create shallow clone.
+            run("$hg clone $at $repository {{release_path}} 2>&1");
+        }
+    }  else {
+        $git = env('bin/git');
+        $gitCache = env('git_cache');
+        $depth = $gitCache ? '' : '--depth 1';
+
+        $at = '';
+        if (!empty($branch)) {
+            $at = "-b $branch";
+        }
+
+        // If option `tag` is set
+        if (input()->hasOption('tag')) {
+            $tag = input()->getOption('tag');
+            if (!empty($tag)) {
+                $at = "-b $tag";
+            }
+        }
+
+        // If option `tag` is not set and option `revision` is set
+        if (empty($tag) && input()->hasOption('revision')) {
+            $revision = input()->getOption('revision');
+        }
+
+        $releases = env('releases_list');
+
+        if (!empty($revision)) {
+            // To checkout specified revision we need to clone all tree.
             run("$git clone $at --recursive -q $repository {{release_path}} 2>&1");
+            run("cd {{release_path}} && $git checkout $revision");
+        } elseif ($gitCache && isset($releases[1])) {
+            try {
+                run("$git clone $at --recursive -q --reference {{deploy_path}}/releases/{$releases[1]} --dissociate $repository  {{release_path}} 2>&1");
+            } catch (RuntimeException $exc) {
+                // If {{deploy_path}}/releases/{$releases[1]} has a failed git clone, is empty, shallow etc, git would throw error and give up. So we're forcing it to act without reference in this situation
+                run("$git clone $at --recursive -q $repository {{release_path}} 2>&1");
+            }
+        } else {
+            // if we're using git cache this would be identical to above code in catch - full clone. If not, it would create shallow clone.
+            run("$git clone $at $depth --recursive -q $repository {{release_path}} 2>&1");
         }
-    } else {
-        // if we're using git cache this would be identical to above code in catch - full clone. If not, it would create shallow clone.
-        run("$git clone $at $depth --recursive -q $repository {{release_path}} 2>&1");
     }
 })->desc('Updating code');
 
@@ -315,11 +369,11 @@ task('deploy:writable', function () {
                         }
                     }
                 } else {
-                    run("$sudo chmod -R 777 $dirs");
+                    run("chmod -R 777 $dirs");
                 }
             // If we are not on OS-X and have no ACL installed use POSIX
             } else {
-                run("$sudo chmod -R 777 $dirs");
+                run("chmod -R 777 $dirs");
             }
         } catch (\RuntimeException $e) {
             $formatter = \Deployer\Deployer::get()->getHelper('formatter');
@@ -342,9 +396,14 @@ task('deploy:writable', function () {
  */
 task('deploy:vendors', function () {
     $composer = env('bin/composer');
+    $composerJson = env('config/composer');
     $envVars = env('env_vars') ? 'export ' . env('env_vars') . ' &&' : '';
-
-    run("cd {{release_path}} && $envVars $composer {{composer_options}}");
+    if(dirname($composerJson) !== env('release_path')) {
+        $dir = dirname($composerJson);
+    } else {
+        $dir = env('release_path');
+    }
+    run("cd $dir && $envVars $composer {{composer_options}}");
 })->desc('Installing vendors');
 
 

@@ -33,7 +33,19 @@ env('env', 'prod');
 set('bin_dir', 'app');
 set('var_dir', 'app');
 
+/**
+ * Custom bins.
+ */
+env('dir/symfony', function () {
+    $composerJson = env('config/composer');
+    if(dirname($composerJson) !== env('release_path')) {
+        $dir = dirname($composerJson);
+    } else {
+        $dir = env('release_path');
+    }
 
+    return $dir;
+});
 /**
  * Create cache dir
  */
@@ -74,7 +86,7 @@ task('deploy:assetic:dump', function () {
         return;
     }
 
-    run('{{bin/php}} {{release_path}}/' . trim(get('bin_dir'), '/') . '/console assetic:dump --env={{env}} --no-debug');
+    run('{{bin/php}} {{dir/symfony}}/' . trim(get('bin_dir'), '/') . '/console assetic:dump --env={{env}} --no-debug');
 })->desc('Dump assets');
 
 
@@ -82,7 +94,7 @@ task('deploy:assetic:dump', function () {
  * Warm up cache
  */
 task('deploy:cache:warmup', function () {
-    run('{{bin/php}} {{release_path}}/' . trim(get('bin_dir'), '/') . '/console cache:warmup  --env={{env}} --no-debug');
+    run('{{bin/php}} {{dir/symfony}}/' . trim(get('bin_dir'), '/') . '/console cache:warmup  --env={{env}} --no-debug');
 })->desc('Warm up cache');
 
 
@@ -90,7 +102,7 @@ task('deploy:cache:warmup', function () {
  * Migrate database
  */
 task('database:migrate', function () {
-    run('{{bin/php}} {{release_path}}/' . trim(get('bin_dir'), '/') . '/console doctrine:migrations:migrate --env={{env}} --no-debug --no-interaction');
+    run('{{bin/php}} {{dir/symfony}}/' . trim(get('bin_dir'), '/') . '/console doctrine:migrations:migrate --env={{env}} --no-debug --no-interaction');
 })->desc('Migrate database');
 
 

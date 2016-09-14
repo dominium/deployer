@@ -22,7 +22,7 @@ task('deploy:assetic:dump', function () {
         return;
     }
 
-    run('{{bin/php}} {{release_path}}/' . trim(get('bin_dir'), '/') . '/console assets:install --env={{env}} --no-debug {{release_path}}/web');
+    run('{{bin/php}} {{dir/symfony}}/' . trim(get('bin_dir'), '/') . '/console assets:install --env={{env}} --no-debug {{dir/symfony}}/web');
 })->desc('Dump assets');
 
 // Symfony shared dirs
