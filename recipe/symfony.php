@@ -51,7 +51,7 @@ env('dir/symfony', function () {
  */
 task('deploy:create_cache_dir', function () {
     // Set cache dir
-    env('cache_dir', '{{release_path}}/' . trim(get('var_dir'), '/') . '/cache');
+    env('cache_dir', '{{dir/symfony}}/' . trim(get('var_dir'), '/') . '/cache');
 
     // Remove cache dir if it exist
     run('if [ -d "{{cache_dir}}" ]; then rm -rf {{cache_dir}}; fi');
@@ -110,8 +110,8 @@ task('database:migrate', function () {
  * Remove app_dev.php files
  */
 task('deploy:clear_controllers', function () {
-    run("rm -f {{release_path}}/web/app_*.php");
-    run("rm -f {{release_path}}/web/config.php");
+    run("rm -f {{dir/symfony}}/web/app_*.php");
+    run("rm -f {{dir/symfony}}/web/config.php");
 })->setPrivate();
 
 after('deploy:update_code', 'deploy:clear_controllers');

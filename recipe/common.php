@@ -396,14 +396,8 @@ task('deploy:writable', function () {
  */
 task('deploy:vendors', function () {
     $composer = env('bin/composer');
-    $composerJson = env('config/composer');
     $envVars = env('env_vars') ? 'export ' . env('env_vars') . ' &&' : '';
-    if(dirname($composerJson) !== env('release_path')) {
-        $dir = dirname($composerJson);
-    } else {
-        $dir = env('release_path');
-    }
-    run("cd $dir && $envVars $composer {{composer_options}}");
+    run("cd {{dir/symfony}} && $envVars $composer {{composer_options}}");
 })->desc('Installing vendors');
 
 
